@@ -1,0 +1,16 @@
+{
+  "accountAssociation": {
+    "header": "BASE64_HEADER",
+    "payload": "BASE64_PAYLOAD",
+    "signature": "BASE64_SIGNATURE"
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "Tap-the-Cat",
+    "homeUrl": "https://fc-pet-the-cat.vercel.app",
+    "iconUrl": "https://fc-pet-the-cat.vercel.app/cat-icon.png",
+    "imageUrl": "https://fc-pet-the-cat.vercel.app/cat-og.png",
+    "buttonTitle": "Play",
+    "subtitle": "by @unknownking"
+  }
+}
