@@ -1,13 +1,13 @@
 export default function Head() {
   const embed = {
     version: "1",
-    imageUrl: "https://YOUR_DOMAIN/cat-og.png",
+    imageUrl: "https://fc-pet-the-cat.vercel.app/cat-og.png",
     button: {
       title: "Play",
       action: {
         type: "launch_frame",
         name: "Tap-the-Cat",
-        url: "https://YOUR_DOMAIN",
+        url: "https://fc-pet-the-cat.vercel.app",
         splashImageUrl: "https://YOUR_DOMAIN/cat-icon.png",
         splashBackgroundColor: "#ffb703"
       }
