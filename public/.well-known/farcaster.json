@@ -1,8 +1,8 @@
 {
   "accountAssociation": {
-    "header": "BASE64_HEADER",
-    "payload": "BASE64_PAYLOAD",
-    "signature": "BASE64_SIGNATURE"
+    "header": "eyJmaWQiOjI0MDQ4NiwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDc5OWZmRGFlYzM4QTg4MWI3OTNBQjE3QUYwOEI3RmE5Nzk0ZDE2QzMifQ",
+    "payload": "eyJkb21haW4iOiJmYy1wZXQtdGhlLWNhdC52ZXJjZWwuYXBwIn0",
+    "signature": "MHhkYzc0OWUwODQyYWMyNDQ1NjllYjRhOWIxYjhiZmZhYzhlMTI1OGVhZmIzMGU4MWRkNDJhNTM0NjFkYzAwOTUxNTk3ZGQzMzJmYTMwYTQ5NmFjMDJjNTA0Njg2MzliOTg5NzI2MGY3YTUwOTE3ZTUxOTYzNzkwNWZkNTc0ZGZhNzFj"
   },
   "miniapp": {
     "version": "1",
@@ -11,6 +11,8 @@
     "iconUrl": "https://fc-pet-the-cat.vercel.app/cat-icon.png",
     "imageUrl": "https://fc-pet-the-cat.vercel.app/cat-og.png",
     "buttonTitle": "Play",
-    "subtitle": "by @unknownking"
+    "subtitle": "by @unknownking",
+    "splashImageUrl": "https://fc-pet-the-cat.vercel.app/cat-icon.png",
+    "splashBackgroundColor": "#ffb703"
   }
 }
