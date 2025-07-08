@@ -75,7 +75,7 @@ export default function Home() {
         <div className="flex flex-col items-center gap-3">
           <button
             onClick={async () => {
-              const message = `😸 I petted the cat ${taps} times in ${GAME_LENGTH} seconds! Try it yourself: https://fc-pet-the-cat.vercel.app`;
+              const message = `😸 I petted the cat ${taps} times in ${GAME_LENGTH} seconds! Try it yourself: https://farcaster.xyz/miniapps/1s5lW72LNk14/tap-the-cat`;
               try {
                 await sdk.actions.composeCast({ text: message });
               } catch (err) {
