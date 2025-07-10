@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { submitScoreToChain, isWalletConnected, connectWallet, getUserAddress } from "@/lib/submitScore";
 import { getLeaderboard } from "@/lib/getLeaderboard";
@@ -87,39 +88,7 @@ export default function Home() {
   }, [isRunning, timeLeft]);
 
   // Handle score submission when game ends
-  useEffect(() => {
-    if (gameEnded && !scoreSubmitted && taps > 0 && walletConnected) {
-      handleScoreSubmission();
-    }
-  }, [gameEnded, scoreSubmitted, taps, walletConnected]);
-
-  const handleConnectWallet = async () => {
-    if (isConnecting) return;
-
-    setIsConnecting(true);
-    try {
-      const accounts = await connectWallet();
-      if (accounts && accounts.length > 0) {
-        setWalletConnected(true);
-        setUserAddress(accounts[0]);
-        console.log("Farcaster wallet connected:", accounts[0]);
-      }
-    } catch (error: any) {
-      console.error("Failed to connect Farcaster wallet:", error);
-      setSubmitError(error.message || "Failed to connect Farcaster wallet");
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  const handleDisconnectWallet = () => {
-    setWalletConnected(false);
-    setUserAddress(null);
-    setScoreSubmitted(false);
-    setSubmitError(null);
-  };
-
-  const handleScoreSubmission = async () => {
+  const handleScoreSubmission = useCallback(async () => {
     if (isSubmitting || scoreSubmitted) return;
 
     setIsSubmitting(true);
@@ -136,12 +105,46 @@ export default function Home() {
       const updatedLeaderboard = await getLeaderboard();
       setLeaderboard(updatedLeaderboard);
       
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to submit score";
       console.error("Failed to submit score:", error);
-      setSubmitError(error.message || "Failed to submit score");
+      setSubmitError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
+  }, [isSubmitting, scoreSubmitted, taps]);
+
+  useEffect(() => {
+    if (gameEnded && !scoreSubmitted && taps > 0 && walletConnected) {
+      handleScoreSubmission();
+    }
+  }, [gameEnded, scoreSubmitted, taps, walletConnected, handleScoreSubmission]);
+
+  const handleConnectWallet = async () => {
+    if (isConnecting) return;
+
+    setIsConnecting(true);
+    try {
+      const accounts = await connectWallet();
+      if (accounts && accounts.length > 0) {
+        setWalletConnected(true);
+        setUserAddress(accounts[0]);
+        console.log("Farcaster wallet connected:", accounts[0]);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to connect Farcaster wallet";
+      console.error("Failed to connect Farcaster wallet:", error);
+      setSubmitError(errorMessage);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectWallet = () => {
+    setWalletConnected(false);
+    setUserAddress(null);
+    setScoreSubmitted(false);
+    setSubmitError(null);
   };
 
   const handleTap = () => {
@@ -188,13 +191,16 @@ export default function Home() {
   return (
     <main className="flex flex-col items-center justify-center h-full min-h-screen gap-6 bg-violet-500 px-4 py-8">
       {/* CAT IMAGE */}
-      <img
+      <Image
         src="/cat.png"
         alt="Brown cat"
+        width={160}
+        height={160}
         className={`w-40 h-40 rounded-2xl shadow-lg select-none transition-transform ${
           timeLeft === 0 ? "grayscale cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95"
         }`}
         onClick={handleTap}
+        priority
       />
 
       {/* PET BUTTON */}
@@ -216,7 +222,7 @@ export default function Home() {
           Time left: <span className="font-bold text-yellow-300">{timeLeft}s</span>
         </p>
         <p className="text-lg font-retro text-yellow-300">
-          You've petted the cat <span className="font-bold text-white">{taps}</span> times
+          You&apos;ve petted the cat <span className="font-bold text-white">{taps}</span> times
         </p>
       </div>
 

@@ -1,17 +1,27 @@
 "use client";
-import { createWalletClient, custom } from "viem";
 import { base } from "viem/chains";
 import { abi } from "./abi";
 import { sdk } from "@farcaster/miniapp-sdk";
 
 const contractAddress = "0xE3DcD541fce641264299a7F27Af5b3DeBaaD2d8f";
 
-export async function submitScoreToChain(score: number) {
+interface WalletClient {
+  getAddresses(): Promise<string[]>;
+  writeContract(params: {
+    address: string;
+    abi: typeof abi;
+    functionName: string;
+    args: [bigint];
+    account: string;
+  }): Promise<string>;
+}
+
+export async function submitScoreToChain(score: number): Promise<string> {
   try {
     // Use Farcaster's wallet provider
     const provider = await sdk.wallet.createWalletClient({
       chain: base,
-    });
+    }) as WalletClient;
 
     if (!provider) {
       throw new Error("Failed to create wallet client");
@@ -38,18 +48,22 @@ export async function submitScoreToChain(score: number) {
 
     console.log("✅ Score submitted via Farcaster wallet:", txHash);
     return txHash;
-  } catch (err: any) {
+  } catch (err) {
     console.error("❌ Error submitting score via Farcaster:", err);
     
     // Handle specific error cases
-    if (err.message?.includes("User rejected") || err.message?.includes("rejected")) {
-      throw new Error("Transaction was rejected");
-    } else if (err.message?.includes("insufficient funds")) {
-      throw new Error("Insufficient funds for gas fees");
-    } else if (err.message?.includes("No accounts")) {
-      throw new Error("Please connect your Farcaster wallet");
+    if (err instanceof Error) {
+      if (err.message?.includes("User rejected") || err.message?.includes("rejected")) {
+        throw new Error("Transaction was rejected");
+      } else if (err.message?.includes("insufficient funds")) {
+        throw new Error("Insufficient funds for gas fees");
+      } else if (err.message?.includes("No accounts")) {
+        throw new Error("Please connect your Farcaster wallet");
+      } else {
+        throw new Error(`Failed to submit score: ${err.message}`);
+      }
     } else {
-      throw new Error(`Failed to submit score: ${err.message}`);
+      throw new Error("Failed to submit score: Unknown error");
     }
   }
 }
@@ -59,7 +73,7 @@ export async function isWalletConnected(): Promise<boolean> {
   try {
     const provider = await sdk.wallet.createWalletClient({
       chain: base,
-    });
+    }) as WalletClient;
     
     if (!provider) return false;
     
@@ -75,7 +89,7 @@ export async function connectWallet(): Promise<string[]> {
   try {
     const provider = await sdk.wallet.createWalletClient({
       chain: base,
-    });
+    }) as WalletClient;
 
     if (!provider) {
       throw new Error("Failed to create Farcaster wallet client");
@@ -88,8 +102,9 @@ export async function connectWallet(): Promise<string[]> {
     }
 
     return accounts;
-  } catch (error: any) {
-    throw new Error(`Failed to connect Farcaster wallet: ${error.message}`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    throw new Error(`Failed to connect Farcaster wallet: ${errorMessage}`);
   }
 }
 
@@ -98,7 +113,7 @@ export async function getUserAddress(): Promise<string | null> {
   try {
     const provider = await sdk.wallet.createWalletClient({
       chain: base,
-    });
+    }) as WalletClient;
     
     if (!provider) return null;
     
