@@ -2,7 +2,12 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { sdk } from "@farcaster/miniapp-sdk";
-import { submitScoreToChain, isWalletConnected, connectWallet, getUserAddress } from "@/lib/submitScore";
+import {
+  submitScoreToChain,
+  isWalletConnected,
+  connectWallet,
+  getUserAddress,
+} from "@/lib/submitScore";
 import { getLeaderboard } from "@/lib/getLeaderboard";
 
 type LeaderboardEntry = {
@@ -10,150 +15,91 @@ type LeaderboardEntry = {
   score: bigint;
 };
 
+// 👇 helper to detect Warpcast environment
+function isWarpcast() {
+  return typeof navigator !== "undefined" && navigator.userAgent.includes("Warpcast");
+}
+
 export default function Home() {
   const GAME_LENGTH = 10;
-  
-  // Game state
+
   const [taps, setTaps] = useState(0);
   const [timeLeft, setTime] = useState(GAME_LENGTH);
   const [isRunning, setRun] = useState(false);
   const [gameEnded, setGameEnded] = useState(false);
-  
-  // Blockchain state
+
   const [scoreSubmitted, setScoreSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [walletConnected, setWalletConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [userAddress, setUserAddress] = useState<string | null>(null);
-  
-  // Leaderboard state
+
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
 
-  // Initialize Farcaster SDK
+  // Ready SDK
   useEffect(() => {
     sdk.actions.ready().catch(console.error);
   }, []);
 
-  // Check wallet connection on mount
+  // Check wallet on load
   useEffect(() => {
-    const checkWallet = async () => {
+    const check = async () => {
+      if (!isWarpcast()) return;
       try {
         const connected = await isWalletConnected();
         setWalletConnected(connected);
-        
         if (connected) {
-          // Get the user's Farcaster address
-          const address = await getUserAddress();
-          if (address) {
-            setUserAddress(address);
-          }
+          const addr = await getUserAddress();
+          if (addr) setUserAddress(addr);
         }
-      } catch (error) {
-        console.error("Error checking Farcaster wallet:", error);
+      } catch (e) {
+        console.error("Wallet check failed:", e);
       }
     };
-    checkWallet();
+    check();
   }, []);
 
-  // Load leaderboard on mount
+  // Leaderboard on load
   useEffect(() => {
-    const loadLeaderboard = async () => {
+    const load = async () => {
       setIsLoadingLeaderboard(true);
       try {
         const data = await getLeaderboard();
         setLeaderboard(data);
-      } catch (error) {
-        console.error("Error loading leaderboard:", error);
+      } catch (err) {
+        console.error("Leaderboard error:", err);
       } finally {
         setIsLoadingLeaderboard(false);
       }
     };
-    loadLeaderboard();
+    load();
   }, []);
 
-  // Game timer logic
+  // Timer
   useEffect(() => {
     if (!isRunning) return;
-
     if (timeLeft === 0) {
       setRun(false);
       setGameEnded(true);
       return;
     }
-
     const id = setInterval(() => setTime((t) => t - 1), 1000);
     return () => clearInterval(id);
   }, [isRunning, timeLeft]);
 
-  // Handle score submission when game ends
-  const handleScoreSubmission = useCallback(async () => {
-    if (isSubmitting || scoreSubmitted) return;
-
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      console.log("Submitting score:", taps);
-      const txHash = await submitScoreToChain(taps);
-      console.log("Transaction hash:", txHash);
-      
-      setScoreSubmitted(true);
-      
-      // Refresh leaderboard after successful submission
-      const updatedLeaderboard = await getLeaderboard();
-      setLeaderboard(updatedLeaderboard);
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to submit score";
-      console.error("Failed to submit score:", error);
-      setSubmitError(errorMessage);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [isSubmitting, scoreSubmitted, taps]);
-
+  // Auto-submit
   useEffect(() => {
     if (gameEnded && !scoreSubmitted && taps > 0 && walletConnected) {
       handleScoreSubmission();
     }
-  }, [gameEnded, scoreSubmitted, taps, walletConnected, handleScoreSubmission]);
+  }, [gameEnded, scoreSubmitted, taps, walletConnected]);
 
-  const handleConnectWallet = async () => {
-    if (isConnecting) return;
-
-    setIsConnecting(true);
-    try {
-      const accounts = await connectWallet();
-      if (accounts && accounts.length > 0) {
-        setWalletConnected(true);
-        setUserAddress(accounts[0]);
-        console.log("Farcaster wallet connected:", accounts[0]);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to connect Farcaster wallet";
-      console.error("Failed to connect Farcaster wallet:", error);
-      setSubmitError(errorMessage);
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  const handleDisconnectWallet = () => {
-    setWalletConnected(false);
-    setUserAddress(null);
-    setScoreSubmitted(false);
-    setSubmitError(null);
-  };
-
+  // Tap
   const handleTap = () => {
     if (timeLeft <= 0) return;
-    
-    if (!isRunning) {
-      setRun(true);
-    }
-    
+    if (!isRunning) setRun(true);
     setTaps((n) => n + 1);
   };
 
@@ -167,12 +113,53 @@ export default function Home() {
     setSubmitError(null);
   };
 
-  const handleShare = async () => {
-    const message = `😸 I petted the cat ${taps} times in ${GAME_LENGTH} seconds! Try it yourself: https://farcaster.xyz/miniapps/1s5lW72LNk14/tap-the-cat`;
+  const handleConnectWallet = async () => {
+    if (isConnecting) return;
+    setIsConnecting(true);
     try {
-      await sdk.actions.composeCast({ text: message });
+      const accounts = await connectWallet();
+      if (accounts.length > 0) {
+        setWalletConnected(true);
+        setUserAddress(accounts[0]);
+      }
     } catch (err) {
-      console.error("Failed to share score", err);
+      console.error("Connect error:", err);
+      alert("⚠️ Please open this app in Warpcast to connect your wallet.");
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectWallet = () => {
+    setWalletConnected(false);
+    setUserAddress(null);
+    setScoreSubmitted(false);
+    setSubmitError(null);
+  };
+
+  const handleScoreSubmission = useCallback(async () => {
+    if (isSubmitting || scoreSubmitted) return;
+    setIsSubmitting(true);
+    try {
+      await submitScoreToChain(taps);
+      setScoreSubmitted(true);
+      const lb = await getLeaderboard();
+      setLeaderboard(lb);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error submitting score";
+      console.error("Submit error:", err);
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isSubmitting, scoreSubmitted, taps]);
+
+  const handleShare = async () => {
+    const msg = `😸 I petted the cat ${taps} times in ${GAME_LENGTH} seconds! Try it here: https://farcaster.xyz/miniapps/1s5lW72LNk14/tap-the-cat`;
+    try {
+      await sdk.actions.composeCast({ text: msg });
+    } catch (err) {
+      console.error("Share failed:", err);
     }
   };
 
@@ -182,7 +169,7 @@ export default function Home() {
       const data = await getLeaderboard();
       setLeaderboard(data);
     } catch (error) {
-      console.error("Error refreshing leaderboard:", error);
+      console.error("Leaderboard refresh error:", error);
     } finally {
       setIsLoadingLeaderboard(false);
     }
@@ -217,88 +204,37 @@ export default function Home() {
       </button>
 
       {/* GAME STATUS */}
-      <div className="text-center">
-        <p className="text-lg font-retro text-white">
+      <div className="text-center text-white font-retro">
+        <p>
           Time left: <span className="font-bold text-yellow-300">{timeLeft}s</span>
         </p>
-        <p className="text-lg font-retro text-yellow-300">
-          You&apos;ve petted the cat <span className="font-bold text-white">{taps}</span> times
+        <p>
+          You’ve petted the cat <span className="font-bold">{taps}</span> times
         </p>
       </div>
 
       {/* WALLET CONNECTION */}
-      <div className="w-full max-w-md">
-        {!walletConnected ? (
-          <button
-            onClick={handleConnectWallet}
-            disabled={isConnecting}
-            className={`w-full font-retro px-4 py-3 text-sm rounded-full shadow-lg transition ${
-              isConnecting
-                ? "bg-gray-400 cursor-not-allowed text-gray-600"
-                : "bg-blue-500 hover:bg-blue-600 text-white"
-            }`}
-          >
-            {isConnecting ? "Connecting..." : "🔗 Connect Farcaster Wallet"}
-          </button>
-        ) : (
-          <div className="bg-green-500/20 border border-green-500 rounded-lg p-3 text-center">
-            <p className="text-sm text-green-200 mb-2">
-              ✅ Farcaster Wallet Connected
-            </p>
-            <p className="text-xs text-green-300 font-mono">
-              {userAddress?.slice(0, 6)}...{userAddress?.slice(-4)}
-            </p>
-            <button
-              onClick={handleDisconnectWallet}
-              className="mt-2 text-xs text-green-300 hover:text-green-100 underline"
-            >
-              Disconnect
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* WALLET STATUS */}
-      {!walletConnected && (
-        <div className="bg-yellow-500/20 border border-yellow-500 rounded-lg p-3 text-center max-w-md">
-          <p className="text-sm text-yellow-200">
-            💡 Connect your Farcaster wallet to save scores to the blockchain leaderboard!
-          </p>
-        </div>
+      {isWarpcast() && !walletConnected && (
+        <button
+          onClick={handleConnectWallet}
+          disabled={isConnecting}
+          className="font-retro w-full max-w-md px-4 py-3 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 transition"
+        >
+          {isConnecting ? "Connecting..." : "🔗 Connect Farcaster Wallet"}
+        </button>
       )}
 
-      {/* SCORE SUBMISSION STATUS */}
-      {gameEnded && walletConnected && (
-        <div className="text-center">
-          {isSubmitting && (
-            <div className="bg-blue-500/20 border border-blue-500 rounded-lg p-3">
-              <p className="text-sm text-blue-200">
-                🔄 Submitting your score to the blockchain...
-              </p>
-            </div>
-          )}
-          
-          {scoreSubmitted && (
-            <div className="bg-green-500/20 border border-green-500 rounded-lg p-3">
-              <p className="text-sm text-green-200">
-                ✅ Score successfully submitted to the blockchain!
-              </p>
-            </div>
-          )}
-          
-          {submitError && (
-            <div className="bg-red-500/20 border border-red-500 rounded-lg p-3">
-              <p className="text-sm text-red-200">
-                ❌ {submitError}
-              </p>
-              <button
-                onClick={handleScoreSubmission}
-                className="mt-2 px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition"
-              >
-                Retry
-              </button>
-            </div>
-          )}
+      {/* WALLET INFO */}
+      {walletConnected && userAddress && (
+        <div className="bg-green-500/20 border border-green-500 rounded-lg p-3 text-center max-w-md">
+          <p className="text-sm text-green-200">✅ Wallet Connected</p>
+          <p className="text-xs font-mono text-green-300">{userAddress.slice(0, 6)}...{userAddress.slice(-4)}</p>
+          <button
+            onClick={handleDisconnectWallet}
+            className="mt-1 text-xs text-green-200 underline hover:text-green-100"
+          >
+            Disconnect
+          </button>
         </div>
       )}
 
@@ -311,13 +247,32 @@ export default function Home() {
           >
             Share Score
           </button>
-
           <button
             onClick={resetGame}
             className="font-retro px-4 py-2 bg-white text-violet-700 font-semibold rounded-full shadow hover:bg-gray-100 transition"
           >
             Play Again
           </button>
+        </div>
+      )}
+
+      {/* SUBMISSION STATUS */}
+      {gameEnded && walletConnected && (
+        <div className="text-center">
+          {isSubmitting && <p className="text-blue-200 text-sm">⏳ Submitting your score...</p>}
+          {scoreSubmitted && <p className="text-green-300 text-sm">✅ Score saved!</p>}
+          {submitError && (
+            <div className="text-red-300 text-sm">
+              ❌ {submitError}
+              <br />
+              <button
+                onClick={handleScoreSubmission}
+                className="underline text-xs hover:text-red-100"
+              >
+                Retry
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -333,11 +288,9 @@ export default function Home() {
             {isLoadingLeaderboard ? "..." : "↻"}
           </button>
         </div>
-        
+
         {isLoadingLeaderboard ? (
-          <div className="text-center py-4">
-            <p className="text-sm text-white/60">Loading leaderboard...</p>
-          </div>
+          <p className="text-center text-sm text-white/60">Loading leaderboard...</p>
         ) : leaderboard.length > 0 ? (
           <ol className="space-y-1 font-mono text-sm">
             {leaderboard.map((entry, i) => (
@@ -350,13 +303,11 @@ export default function Home() {
             ))}
           </ol>
         ) : (
-          <div className="text-center py-4">
-            <p className="text-sm text-white/60">No scores yet. Be the first!</p>
-          </div>
+          <p className="text-center text-sm text-white/60">No scores yet. Be the first!</p>
         )}
       </div>
 
-      {/* CREDITS */}
+      {/* FOOTER */}
       <p className="text-sm text-white/80 mt-4">
         Built by <span className="font-semibold">@unknownking</span>
       </p>
