@@ -1,6 +1,5 @@
 import { createPublicClient, http, Log } from "viem";
 import { base } from "viem/chains";
-import { abi } from "./abi";
 
 const CONTRACT_ADDRESS = "0xE3DcD541fce641264299a7F27Af5b3DeBaaD2d8f";
 
@@ -33,8 +32,14 @@ export async function getLeaderboard(): Promise<{ address: string; score: bigint
       
       const logs = await client.getLogs({
         address: CONTRACT_ADDRESS,
-        abi,
-        eventName: "ScoreSubmitted",
+        event: {
+          type: "event",
+          name: "ScoreSubmitted",
+          inputs: [
+            { indexed: true, name: "player", type: "address" },
+            { indexed: false, name: "score", type: "uint256" },
+          ],
+        },
         fromBlock,
         toBlock,
       }) as ScoreSubmittedLog[];
