@@ -36,7 +36,7 @@ export async function isWalletConnected(): Promise<boolean> {
       method: "eth_accounts"
     });
     return accounts.length > 0;
-  } catch (error) {
+  } catch  {
     return false;
   }
 }
