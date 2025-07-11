@@ -2,21 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Your custom styles below */
+/* Global theme */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --foreground: #111111; /* make it darker for better contrast */
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-retro), var(--font-geist-sans), sans-serif;
+}
+
+/* (Optional) You can remove dark mode overrides altogether */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #ffffff;
+    --foreground: #111111;
+  }
 }
