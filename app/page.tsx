@@ -15,16 +15,19 @@ export default function Home() {
   const [scoreSubmitted, setScoreSubmitted] = useState(false);
   const [userAddress, setUserAddress] = useState("");
   const [leaderboard, setLeaderboard] = useState<
-    { address: string; score: bigint }[]
+    { address: string; score: bigint; fid?: number }[]
   >([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   const timeRef = useRef(GAME_LENGTH);
   const tapsRef = useRef(0);
 
+  // Notify Warpcast
   useEffect(() => {
     sdk.actions.ready().catch(console.error);
   }, []);
 
+  // Detect wallet
   useEffect(() => {
     async function checkWallet() {
       try {
@@ -41,10 +44,12 @@ export default function Home() {
     checkWallet();
   }, []);
 
+  // Load leaderboard
   useEffect(() => {
     getLeaderboard().then(setLeaderboard).catch(console.error);
   }, []);
 
+  // Countdown logic
   useEffect(() => {
     if (!isRunning) return;
 
@@ -59,9 +64,8 @@ export default function Home() {
         if (!scoreSubmitted && tapsRef.current > 0) {
           submitScoreToChain(tapsRef.current).then(() => confetti());
           setScoreSubmitted(true);
+          getLeaderboard().then(setLeaderboard).catch(console.error);
         }
-
-        getLeaderboard().then(setLeaderboard).catch(console.error);
       }
     };
 
@@ -70,6 +74,8 @@ export default function Home() {
   }, [isRunning]);
 
   const handleTap = () => {
+    if (visibleTime === 0 || scoreSubmitted) return;
+
     if (!isRunning) {
       timeRef.current = GAME_LENGTH;
       setRun(true);
@@ -88,11 +94,12 @@ export default function Home() {
     setVisibleTaps(0);
     setRun(false);
     setScoreSubmitted(false);
+    setShowLeaderboard(false);
   };
 
   return (
     <main
-      className="flex flex-col items-center justify-center h-full min-h-screen gap-6 px-4 py-8 text-black"
+      className="flex flex-col items-center justify-center h-full min-h-screen gap-6 px-4 py-8"
       style={{
         backgroundImage: "url('/cat-bg.png')",
         backgroundSize: "cover",
@@ -100,7 +107,7 @@ export default function Home() {
       }}
     >
       {/* CAT IMAGE */}
-      <div className="bg-white/80 p-4 rounded-xl shadow">
+      <div className="bg-white/90 p-4 rounded-xl shadow">
         <Image
           src="/cat.png"
           alt="Brown cat"
@@ -116,26 +123,27 @@ export default function Home() {
       <button
         onClick={handleTap}
         disabled={visibleTime === 0}
-        className={`px-6 py-3 text-xl font-bold rounded-full shadow-lg transition active:scale-95 ${
+        className={`px-6 py-3 text-xl font-retro font-bold rounded-full shadow-lg transition active:scale-95 ${
           visibleTime === 0
-            ? "bg-gray-400 cursor-not-allowed"
-            : "bg-yellow-400 hover:bg-yellow-300"
+            ? "bg-gray-400 cursor-not-allowed text-black"
+            : "bg-yellow-400 hover:bg-yellow-300 text-black"
         }`}
       >
         Pet me 😸
       </button>
 
       {/* TIMER + SCORE */}
-      <div className="bg-white/80 px-4 py-2 rounded-lg text-center">
+      <div className="bg-white/90 px-4 py-2 rounded-lg text-center text-black">
         <p className="text-lg font-medium">
           Time left: <span className="font-bold">{visibleTime}s</span>
         </p>
         <p className="text-lg font-medium">
-          You’ve petted the cat <span className="font-bold">{visibleTaps}</span> times
+          You’ve petted the cat{" "}
+          <span className="font-bold">{visibleTaps}</span> times
         </p>
       </div>
 
-      {/* SHARE + RESTART */}
+      {/* SHARE + RESTART + TOGGLE LEADERBOARD */}
       {visibleTime === 0 && (
         <div className="flex flex-col items-center gap-3">
           <button
@@ -147,53 +155,71 @@ export default function Home() {
                 console.error("Failed to share score", err);
               }
             }}
-            className="px-4 py-2 bg-white font-semibold rounded-full shadow hover:bg-gray-100 transition"
+            className="px-4 py-2 bg-white text-black font-semibold rounded-full shadow hover:bg-gray-100 transition"
           >
             Share Score
           </button>
 
           <button
             onClick={resetGame}
-            className="px-4 py-2 bg-white font-semibold rounded-full shadow hover:bg-gray-100 transition"
+            className="px-4 py-2 bg-white text-black font-semibold rounded-full shadow hover:bg-gray-100 transition"
           >
             Play again
+          </button>
+
+          <button
+            onClick={() => setShowLeaderboard((prev) => !prev)}
+            className="px-4 py-2 bg-violet-700 text-white font-semibold rounded-full shadow hover:bg-violet-600 transition"
+          >
+            {showLeaderboard ? "Hide Leaderboard" : "Show Leaderboard"}
           </button>
         </div>
       )}
 
-      {/* LEADERBOARD */}
-      <div className="mt-8 bg-white/80 p-4 rounded-xl w-full max-w-md text-sm shadow-lg">
-        <h2 className="text-lg font-retro mb-2">🏆 Leaderboard</h2>
-        {leaderboard.length === 0 ? (
-          <p className="text-gray-700">No scores submitted yet.</p>
-        ) : (
-          <ol className="space-y-1">
+      {/* LEADERBOARD SECTION */}
+      {showLeaderboard && leaderboard.length > 0 && (
+        <div className="mt-8 bg-white/90 p-4 rounded-xl w-full max-w-md text-sm shadow-lg">
+          <h2 className="text-lg font-retro mb-2 text-black">🏆 Leaderboard</h2>
+          <ol className="space-y-2">
             {leaderboard.map((entry, i) => {
               const isYou =
                 entry.address.toLowerCase() === userAddress.toLowerCase();
+              const avatarUrl = entry.fid
+                ? `https://client.warpcast.com/avatar/${entry.fid}`
+                : "https://placekitten.com/40/40";
+
               return (
                 <li
                   key={entry.address}
-                  className={`flex justify-between ${
-                    isYou ? "font-bold text-violet-800" : ""
+                  className={`flex items-center justify-between ${
+                    isYou ? "font-bold text-violet-800" : "text-black"
                   }`}
                 >
-                  <span>
-                    {i + 1}. {entry.address.slice(0, 6)}...
-                    {entry.address.slice(-4)}{" "}
-                    {isYou && (
-                      <span className="text-xs bg-yellow-200 text-yellow-800 rounded px-1 ml-2">
-                        YOU
-                      </span>
-                    )}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <Image
+                      src={avatarUrl}
+                      width={24}
+                      height={24}
+                      alt="Avatar"
+                      className="rounded-full"
+                    />
+                    <span>
+                      {i + 1}. {entry.address.slice(0, 6)}...
+                      {entry.address.slice(-4)}
+                      {isYou && (
+                        <span className="text-xs bg-yellow-200 text-yellow-800 rounded px-1 ml-2">
+                          YOU
+                        </span>
+                      )}
+                    </span>
+                  </div>
                   <span>{entry.score.toString()}</span>
                 </li>
               );
             })}
           </ol>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* CREDITS */}
       <p className="text-[10px] opacity-80 mt-6 font-mono text-black">
