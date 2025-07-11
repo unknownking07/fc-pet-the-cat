@@ -6,10 +6,10 @@ import {
   submitScoreToChain,
   connectWallet,
   isWalletConnected,
-  getUserAddress,
 } from "@/lib/submitScore";
 import { getLeaderboard } from "@/lib/getLeaderboard";
 
+// Detect if running inside Warpcast
 function isWarpcast() {
   return typeof navigator !== "undefined" && navigator.userAgent.includes("Warpcast");
 }
@@ -23,15 +23,14 @@ export default function Home() {
   const [scoreSubmitted, setScoreSubmitted] = useState(false);
 
   const [walletConnected, setWalletConnected] = useState(false);
-  const [userAddress, setUserAddress] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<{ address: string; score: bigint }[]>([]);
 
-  // Tell Warpcast we're ready
+  // Notify Warpcast
   useEffect(() => {
     sdk.actions.ready().catch(console.error);
   }, []);
 
-  // Auto-connect wallet in Warpcast
+  // Auto-connect wallet
   useEffect(() => {
     const connect = async () => {
       if (!isWarpcast()) return;
@@ -43,15 +42,11 @@ export default function Home() {
         try {
           const accounts = await connectWallet();
           if (accounts.length > 0) {
-            setUserAddress(accounts[0]);
             setWalletConnected(true);
           }
         } catch (err) {
           console.warn("Wallet connection failed", err);
         }
-      } else {
-        const addr = await getUserAddress();
-        if (addr) setUserAddress(addr);
       }
     };
 
@@ -85,9 +80,9 @@ export default function Home() {
     if (gameEnded) {
       sendScore();
     }
-  }, [gameEnded]);
+  }, [gameEnded, scoreSubmitted, taps, walletConnected]);
 
-  // Fetch leaderboard initially
+  // Load leaderboard on first load
   useEffect(() => {
     getLeaderboard().then(setLeaderboard).catch(console.error);
   }, []);
@@ -116,6 +111,7 @@ export default function Home() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-6 bg-violet-500 px-4 py-8">
+      {/* CAT IMAGE */}
       <Image
         src="/cat.png"
         alt="Brown cat"
@@ -125,16 +121,20 @@ export default function Home() {
         className="w-40 h-40 rounded-2xl shadow-lg cursor-pointer hover:scale-105 transition"
       />
 
+      {/* PET BUTTON */}
       <button
         onClick={handleTap}
         disabled={timeLeft === 0}
         className={`px-6 py-3 text-xl font-retro font-bold rounded-full shadow-lg transition active:scale-95 ${
-          timeLeft === 0 ? "bg-gray-400 cursor-not-allowed" : "bg-yellow-400 hover:bg-yellow-300 text-black"
+          timeLeft === 0
+            ? "bg-gray-400 cursor-not-allowed"
+            : "bg-yellow-400 hover:bg-yellow-300 text-black"
         }`}
       >
         Pet me 😸
       </button>
 
+      {/* TIMER + SCORE */}
       <p className="text-lg font-retro text-white">
         Time left: <span className="font-bold">{timeLeft}s</span>
       </p>
@@ -142,6 +142,7 @@ export default function Home() {
         You’ve petted the cat <span className="font-bold">{taps}</span> times
       </p>
 
+      {/* SHARE + RESTART */}
       {gameEnded && (
         <div className="flex flex-col items-center gap-3">
           <button
@@ -159,7 +160,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Leaderboard */}
+      {/* LEADERBOARD */}
       <div className="mt-8 bg-white/10 p-4 rounded-xl text-white w-full max-w-md text-sm">
         <h2 className="text-lg font-retro mb-2">🏆 Leaderboard</h2>
         {leaderboard.length === 0 ? (
