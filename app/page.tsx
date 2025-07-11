@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { getLeaderboard, getFullLeaderboard } from "@/lib/getLeaderboard";
 import { submitScoreToChain } from "@/lib/submitScore";
@@ -49,26 +49,21 @@ export default function Home() {
     checkWallet();
   }, []);
 
-  // Load leaderboard on mount
-  useEffect(() => {
-    loadLeaderboard();
-  }, []);
-
-  // Function to load leaderboard (can switch between recent and full)
-  const loadLeaderboard = async (forceFullHistory = false) => {
+  // ✅ Wrapped in useCallback to avoid missing deps in useEffect
+  const loadLeaderboard = useCallback(async (forceFullHistory = false) => {
     setIsRefreshingLeaderboard(true);
     try {
       console.log("🔄 Loading leaderboard...");
-      
+
       let newLeaderboard;
       if (forceFullHistory || useFullHistory) {
         console.log("📚 Using full history mode");
         newLeaderboard = await getFullLeaderboard();
       } else {
         console.log("⚡ Using recent blocks mode (faster)");
-        newLeaderboard = await getLeaderboard(5000); // Last 5000 blocks
+        newLeaderboard = await getLeaderboard(5000);
       }
-      
+
       setLeaderboard(newLeaderboard);
       console.log("✅ Leaderboard loaded successfully");
     } catch (error) {
@@ -76,7 +71,12 @@ export default function Home() {
     } finally {
       setIsRefreshingLeaderboard(false);
     }
-  };
+  }, [useFullHistory]);
+
+  // Load leaderboard on mount
+  useEffect(() => {
+    loadLeaderboard();
+  }, [loadLeaderboard]);
 
   // Countdown logic
   useEffect(() => {
@@ -93,7 +93,7 @@ export default function Home() {
         if (!scoreSubmitted && tapsRef.current > 0) {
           setIsSubmittingScore(true);
           setSubmitError(null);
-          
+
           try {
             console.log("🚀 Submitting score to chain...");
             await submitScoreToChain(tapsRef.current);
@@ -103,13 +103,11 @@ export default function Home() {
               origin: { y: 0.6 }
             });
             setScoreSubmitted(true);
-            
+
             console.log("🔄 Fetching updated leaderboard...");
-            // Wait a bit for the transaction to be indexed
             setTimeout(async () => {
               await loadLeaderboard();
             }, 2000);
-            
           } catch (error) {
             console.error("❌ Failed to submit score:", error);
             setSubmitError("Failed to submit score. Please try again.");
@@ -122,7 +120,7 @@ export default function Home() {
 
     const intervalId = setInterval(tick, 1000);
     return () => clearInterval(intervalId);
-  }, [isRunning, scoreSubmitted]);
+  }, [isRunning, scoreSubmitted, loadLeaderboard]);
 
   const handleTap = () => {
     if (visibleTime === 0 || scoreSubmitted || isSubmittingScore) return;
@@ -159,7 +157,9 @@ export default function Home() {
 
   const toggleHistoryMode = () => {
     setUseFullHistory(!useFullHistory);
-    console.log(`🔄 Switched to ${!useFullHistory ? 'full history' : 'recent blocks'} mode`);
+    console.log(
+      `🔄 Switched to ${!useFullHistory ? "full history" : "recent blocks"} mode`
+    );
   };
 
   return (
@@ -180,8 +180,9 @@ export default function Home() {
           height={160}
           className="rounded-2xl shadow-lg select-none"
           onClick={handleTap}
-          style={{ 
-            cursor: (visibleTime === 0 || isSubmittingScore) ? "not-allowed" : "pointer",
+          style={{
+            cursor:
+              visibleTime === 0 || isSubmittingScore ? "not-allowed" : "pointer",
             opacity: isSubmittingScore ? 0.7 : 1,
           }}
         />
@@ -206,12 +207,12 @@ export default function Home() {
           Time left: <span className="font-bold">{visibleTime}s</span>
         </p>
         <p className="text-lg font-medium">
-          You've petted the cat{" "}
+          You&apos;ve petted the cat{" "}
           <span className="font-bold">{visibleTaps}</span> times
         </p>
       </div>
 
-      {/* LOADING STATE FOR SCORE SUBMISSION */}
+      {/* SUBMITTING LOADER */}
       {isSubmittingScore && (
         <div className="bg-blue-100 px-4 py-2 rounded-lg text-center text-blue-700">
           <p className="text-sm">🚀 Submitting score to blockchain...</p>
@@ -219,7 +220,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* ERROR STATE */}
+      {/* ERROR */}
       {submitError && (
         <div className="bg-red-100 px-4 py-2 rounded-lg text-center text-red-700">
           <p className="text-sm">{submitError}</p>
@@ -232,7 +233,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* SHARE + RESTART + TOGGLE LEADERBOARD */}
+      {/* GAME OVER ACTIONS */}
       {visibleTime === 0 && !isSubmittingScore && (
         <div className="flex flex-col items-center gap-3">
           <button
@@ -282,7 +283,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* LEADERBOARD SECTION */}
+      {/* LEADERBOARD */}
       {showLeaderboard && (
         <div className="mt-8 bg-white/90 p-4 rounded-xl w-full max-w-md text-sm shadow-lg">
           <div className="flex items-center justify-between mb-2">
@@ -291,7 +292,7 @@ export default function Home() {
               {useFullHistory ? "📚 Full History" : "⚡ Recent Blocks"}
             </div>
           </div>
-          
+
           {isRefreshingLeaderboard ? (
             <div className="text-center py-4">
               <p className="text-gray-600">Loading leaderboard...</p>
@@ -309,7 +310,9 @@ export default function Home() {
                   <li
                     key={entry.address}
                     className={`flex items-center justify-between p-2 rounded ${
-                      isYou ? "font-bold text-violet-800 bg-violet-50" : "text-black"
+                      isYou
+                        ? "font-bold text-violet-800 bg-violet-50"
+                        : "text-black"
                     }`}
                   >
                     <div className="flex items-center gap-2">
