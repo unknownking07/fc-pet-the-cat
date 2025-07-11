@@ -8,7 +8,7 @@ export async function getLeaderboard(): Promise<
 > {
   const client = createPublicClient({
     chain: base,
-    transport: http("https://base-mainnet.g.alchemy.com/v2/yKZCAarfw64JvLWyySYJH"), // your Alchemy key
+    transport: http("https://base-mainnet.g.alchemy.com/v2/yKZCAarfw64JvLWyySYJH"),
   });
 
   const logs = await client.getLogs({
@@ -16,11 +16,10 @@ export async function getLeaderboard(): Promise<
     event: parseAbiItem(
       "event ScoreSubmitted(address indexed player, uint256 score)"
     ),
-    fromBlock: BigInt("20000000"), // safer block range (don’t use 0)
+    fromBlock: BigInt("20000000"),
     toBlock: "latest",
   });
 
-  // Map highest scores
   const scores = new Map<string, bigint>();
   for (const log of logs) {
     const { player, score } = log.args as {
@@ -33,8 +32,8 @@ export async function getLeaderboard(): Promise<
     }
   }
 
-  // Convert to array and sort descending
   return [...scores.entries()]
     .map(([address, score]) => ({ address, score }))
-    .sort((a, b) => Number(b.score - a.score));
+    .sort((a, b) => Number(b.score - a.score))
+    .slice(0, 10); // ✅ Limit to top 10
 }

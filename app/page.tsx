@@ -21,12 +21,10 @@ export default function Home() {
   const timeRef = useRef(GAME_LENGTH);
   const tapsRef = useRef(0);
 
-  // Notify Warpcast
   useEffect(() => {
     sdk.actions.ready().catch(console.error);
   }, []);
 
-  // Detect wallet
   useEffect(() => {
     async function checkWallet() {
       try {
@@ -43,12 +41,10 @@ export default function Home() {
     checkWallet();
   }, []);
 
-  // Load leaderboard once
   useEffect(() => {
     getLeaderboard().then(setLeaderboard).catch(console.error);
   }, []);
 
-  // Countdown logic
   useEffect(() => {
     if (!isRunning) return;
 
@@ -59,11 +55,13 @@ export default function Home() {
       } else {
         clearInterval(intervalId);
         setRun(false);
+
         if (!scoreSubmitted && tapsRef.current > 0) {
           submitScoreToChain(tapsRef.current).then(() => confetti());
           setScoreSubmitted(true);
-          getLeaderboard().then(setLeaderboard).catch(console.error);
         }
+
+        getLeaderboard().then(setLeaderboard).catch(console.error);
       }
     };
 
@@ -94,7 +92,7 @@ export default function Home() {
 
   return (
     <main
-      className="flex flex-col items-center justify-center h-full min-h-screen gap-6 px-4 py-8"
+      className="flex flex-col items-center justify-center h-full min-h-screen gap-6 px-4 py-8 text-black"
       style={{
         backgroundImage: "url('/cat-bg.png')",
         backgroundSize: "cover",
@@ -164,9 +162,11 @@ export default function Home() {
       )}
 
       {/* LEADERBOARD */}
-      {leaderboard.length > 0 && (
-        <div className="mt-8 bg-white/80 p-4 rounded-xl w-full max-w-md text-sm shadow-lg">
-          <h2 className="text-lg font-retro mb-2">🏆 Leaderboard</h2>
+      <div className="mt-8 bg-white/80 p-4 rounded-xl w-full max-w-md text-sm shadow-lg">
+        <h2 className="text-lg font-retro mb-2">🏆 Leaderboard</h2>
+        {leaderboard.length === 0 ? (
+          <p className="text-gray-700">No scores submitted yet.</p>
+        ) : (
           <ol className="space-y-1">
             {leaderboard.map((entry, i) => {
               const isYou =
@@ -192,11 +192,11 @@ export default function Home() {
               );
             })}
           </ol>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* CREDITS */}
-      <p className="text-[10px] opacity-80 mt-6 font-mono">
+      <p className="text-[10px] opacity-80 mt-6 font-mono text-black">
         Built by <span className="font-semibold">@unknownking</span>
       </p>
     </main>
