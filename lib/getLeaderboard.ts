@@ -33,14 +33,8 @@ export async function getLeaderboard(): Promise<{ address: string; score: bigint
       
       const logs = await client.getLogs({
         address: CONTRACT_ADDRESS,
-        event: {
-          type: "event",
-          name: "ScoreSubmitted",
-          inputs: [
-            { indexed: true, name: "player", type: "address" },
-            { indexed: false, name: "score", type: "uint256" },
-          ],
-        },
+        abi,
+        eventName: "ScoreSubmitted",
         fromBlock,
         toBlock,
       }) as ScoreSubmittedLog[];
