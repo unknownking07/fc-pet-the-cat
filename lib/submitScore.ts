@@ -5,23 +5,12 @@ import { sdk } from "@farcaster/miniapp-sdk";
 
 const contractAddress = "0xE3DcD541fce641264299a7F27Af5b3DeBaaD2d8f";
 
-interface WalletClient {
-  getAddresses(): Promise<string[]>;
-  writeContract(params: {
-    address: string;
-    abi: typeof abi;
-    functionName: string;
-    args: [bigint];
-    account: string;
-  }): Promise<string>;
-}
-
 export async function submitScoreToChain(score: number): Promise<string> {
   try {
     // Use Farcaster's wallet provider
     const provider = await sdk.wallet.createWalletClient({
       chain: base,
-    }) as WalletClient;
+    });
 
     if (!provider) {
       throw new Error("Failed to create wallet client");
@@ -73,7 +62,7 @@ export async function isWalletConnected(): Promise<boolean> {
   try {
     const provider = await sdk.wallet.createWalletClient({
       chain: base,
-    }) as WalletClient;
+    });
     
     if (!provider) return false;
     
@@ -89,7 +78,7 @@ export async function connectWallet(): Promise<string[]> {
   try {
     const provider = await sdk.wallet.createWalletClient({
       chain: base,
-    }) as WalletClient;
+    });
 
     if (!provider) {
       throw new Error("Failed to create Farcaster wallet client");
@@ -113,7 +102,7 @@ export async function getUserAddress(): Promise<string | null> {
   try {
     const provider = await sdk.wallet.createWalletClient({
       chain: base,
-    }) as WalletClient;
+    });
     
     if (!provider) return null;
     
