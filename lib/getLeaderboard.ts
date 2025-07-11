@@ -1,72 +1,40 @@
-import { createPublicClient, http, Log } from "viem";
+import { createPublicClient, http, parseAbiItem } from "viem";
 import { base } from "viem/chains";
 
-const CONTRACT_ADDRESS = "0xE3DcD541fce641264299a7F27Af5b3DeBaaD2d8f";
+const contractAddress = "0xE3DcD541fce641264299a7F27Af5b3DeBaaD2d8f";
 
-const client = createPublicClient({
-  chain: base,
-  transport: http(process.env.NEXT_PUBLIC_RPC_URL), // Use your Alchemy RPC from env
-});
+export async function getLeaderboard(): Promise<
+  { address: string; score: bigint }[]
+> {
+  const client = createPublicClient({
+    chain: base,
+    transport: http("https://base-mainnet.g.alchemy.com/v2/yKZCAarfw64JvLWyySYJH"), // your Alchemy key
+  });
 
-interface ScoreSubmittedLog extends Log {
-  args: {
-    player: string;
-    score: bigint;
-  };
-}
+  const logs = await client.getLogs({
+    address: contractAddress,
+    event: parseAbiItem(
+      "event ScoreSubmitted(address indexed player, uint256 score)"
+    ),
+    fromBlock: BigInt("20000000"), // safer block range (don’t use 0)
+    toBlock: "latest",
+  });
 
-export async function getLeaderboard(): Promise<{ address: string; score: bigint }[]> {
-  const leaderboard: { address: string; score: bigint }[] = [];
-
-  try {
-    const latestBlock = await client.getBlockNumber();
-    const BLOCK_CHUNK_SIZE = BigInt(500); // Alchemy's limit
-    
-    // Get all logs in chunks of 500 blocks
-    const allLogs: ScoreSubmittedLog[] = [];
-    
-    for (let fromBlock = BigInt(0); fromBlock <= latestBlock; fromBlock += BLOCK_CHUNK_SIZE) {
-      const toBlock = fromBlock + BLOCK_CHUNK_SIZE - BigInt(1) > latestBlock 
-        ? latestBlock 
-        : fromBlock + BLOCK_CHUNK_SIZE - BigInt(1);
-      
-      const logs = await client.getLogs({
-        address: CONTRACT_ADDRESS,
-        event: {
-          type: "event",
-          name: "ScoreSubmitted",
-          inputs: [
-            { indexed: true, name: "player", type: "address" },
-            { indexed: false, name: "score", type: "uint256" },
-          ],
-        },
-        fromBlock,
-        toBlock,
-      }) as ScoreSubmittedLog[];
-      
-      allLogs.push(...logs);
+  // Map highest scores
+  const scores = new Map<string, bigint>();
+  for (const log of logs) {
+    const { player, score } = log.args as {
+      player: `0x${string}`;
+      score: bigint;
+    };
+    const prev = scores.get(player);
+    if (!prev || score > prev) {
+      scores.set(player, score);
     }
-
-    const scoreMap = new Map<string, bigint>();
-
-    allLogs.forEach((log: ScoreSubmittedLog) => {
-      const player = log.args.player;
-      const score = log.args.score;
-
-      if (!scoreMap.has(player) || score > scoreMap.get(player)!) {
-        scoreMap.set(player, score);
-      }
-    });
-
-    scoreMap.forEach((score, address) => {
-      leaderboard.push({ address, score });
-    });
-
-    leaderboard.sort((a, b) => Number(b.score - a.score));
-
-    return leaderboard.slice(0, 10); // top 10
-  } catch (error) {
-    console.error("Error fetching leaderboard:", error);
-    return []; // Return empty array on error
   }
+
+  // Convert to array and sort descending
+  return [...scores.entries()]
+    .map(([address, score]) => ({ address, score }))
+    .sort((a, b) => Number(b.score - a.score));
 }
