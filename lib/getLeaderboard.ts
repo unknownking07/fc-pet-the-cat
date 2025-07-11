@@ -21,15 +21,15 @@ export async function getLeaderboard(): Promise<{ address: string; score: bigint
 
   try {
     const latestBlock = await client.getBlockNumber();
-    const BLOCK_CHUNK_SIZE = 500n; // Alchemy's limit
+    const BLOCK_CHUNK_SIZE = BigInt(500); // Alchemy's limit
     
     // Get all logs in chunks of 500 blocks
     const allLogs: ScoreSubmittedLog[] = [];
     
-    for (let fromBlock = 0n; fromBlock <= latestBlock; fromBlock += BLOCK_CHUNK_SIZE) {
-      const toBlock = fromBlock + BLOCK_CHUNK_SIZE - 1n > latestBlock 
+    for (let fromBlock = BigInt(0); fromBlock <= latestBlock; fromBlock += BLOCK_CHUNK_SIZE) {
+      const toBlock = fromBlock + BLOCK_CHUNK_SIZE - BigInt(1) > latestBlock 
         ? latestBlock 
-        : fromBlock + BLOCK_CHUNK_SIZE - 1n;
+        : fromBlock + BLOCK_CHUNK_SIZE - BigInt(1);
       
       const logs = await client.getLogs({
         address: CONTRACT_ADDRESS,
