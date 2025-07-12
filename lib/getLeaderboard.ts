@@ -3,8 +3,8 @@ import { base } from "viem/chains";
 
 const contractAddress = "0xE3DcD541fce641264299a7F27Af5b3DeBaaD2d8f";
 
-// ✅ Get leaderboard from recent blocks (much faster)
-export async function getLeaderboard(fromBlocksAgo: number = 5000): Promise<
+// ✅ Enhanced leaderboard function with better error handling
+export async function getLeaderboard(fromBlocksAgo: number = 10000): Promise<
   { address: string; score: bigint }[]
 > {
   try {
@@ -18,6 +18,7 @@ export async function getLeaderboard(fromBlocksAgo: number = 5000): Promise<
     const fromBlock = currentBlock - BigInt(fromBlocksAgo);
 
     console.log(`📊 Fetching leaderboard from block ${fromBlock} to ${currentBlock}`);
+    console.log(`📊 Searching last ${fromBlocksAgo} blocks`);
 
     const logs = await client.getLogs({
       address: contractAddress,
@@ -30,7 +31,13 @@ export async function getLeaderboard(fromBlocksAgo: number = 5000): Promise<
 
     console.log(`📋 Found ${logs.length} score events in recent blocks`);
 
+    if (logs.length === 0) {
+      console.log("⚠️ No events found in recent blocks. Contract might be new or events are older.");
+      return [];
+    }
+
     const scores = new Map<string, bigint>();
+    let processedEvents = 0;
     
     // Process logs in chronological order
     for (const log of logs) {
@@ -49,6 +56,8 @@ export async function getLeaderboard(fromBlocksAgo: number = 5000): Promise<
         continue;
       }
 
+      processedEvents++;
+      
       // Convert to lowercase for consistent comparison
       const playerLower = player.toLowerCase();
       const prev = scores.get(playerLower);
@@ -60,7 +69,8 @@ export async function getLeaderboard(fromBlocksAgo: number = 5000): Promise<
       }
     }
 
-    console.log(`👥 Processed scores for ${scores.size} unique players`);
+    console.log(`✅ Processed ${processedEvents} valid events`);
+    console.log(`👥 Unique players: ${scores.size}`);
 
     // Convert to array and sort by score (highest first)
     const leaderboard = [...scores.entries()]
@@ -83,12 +93,19 @@ export async function getLeaderboard(fromBlocksAgo: number = 5000): Promise<
   } catch (error) {
     console.error("❌ Failed to fetch leaderboard:", error);
     
+    // Log more detailed error information
+    if (error instanceof Error) {
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
+    
     // Return empty array instead of throwing to prevent UI crashes
     return [];
   }
 }
 
-// ✅ Fallback function to get all historical data (slower but comprehensive)
+// ✅ Enhanced full leaderboard function
 export async function getFullLeaderboard(): Promise<
   { address: string; score: bigint }[]
 > {
@@ -98,20 +115,37 @@ export async function getFullLeaderboard(): Promise<
       transport: http("https://base-mainnet.g.alchemy.com/v2/yKZCAarfw64JvLWyySYJH"),
     });
 
-    console.log("📊 Fetching FULL leaderboard (this may take longer...)");
+    console.log("📊 Fetching FULL leaderboard from contract deployment...");
+
+    // Try to get contract creation block first
+    let fromBlock = BigInt("20000000"); // Your fallback starting block
+    
+    try {
+      // You can get the actual deployment block by checking the contract creation transaction
+      // For now, using the fallback block
+      console.log(`📊 Using block ${fromBlock} as starting point`);
+    } catch (blockError) {
+      console.warn("⚠️ Could not determine contract creation block, using fallback");
+    }
 
     const logs = await client.getLogs({
       address: contractAddress,
       event: parseAbiItem(
         "event ScoreSubmitted(address indexed player, uint256 score)"
       ),
-      fromBlock: BigInt("20000000"), // Your original starting block
+      fromBlock,
       toBlock: "latest",
     });
 
-    console.log(`📋 Found ${logs.length} total score events`);
+    console.log(`📋 Found ${logs.length} total score events in full history`);
+
+    if (logs.length === 0) {
+      console.log("⚠️ No events found in full history. Contract might not have any submissions yet.");
+      return [];
+    }
 
     const scores = new Map<string, bigint>();
+    let processedEvents = 0;
     
     for (const log of logs) {
       if (!log.args) continue;
@@ -123,6 +157,7 @@ export async function getFullLeaderboard(): Promise<
 
       if (!player || score === undefined) continue;
 
+      processedEvents++;
       const playerLower = player.toLowerCase();
       const prev = scores.get(playerLower);
       
@@ -131,9 +166,10 @@ export async function getFullLeaderboard(): Promise<
       }
     }
 
-    console.log(`👥 Processed scores for ${scores.size} unique players`);
+    console.log(`✅ Processed ${processedEvents} valid events from full history`);
+    console.log(`👥 Unique players in full history: ${scores.size}`);
 
-    return [...scores.entries()]
+    const leaderboard = [...scores.entries()]
       .map(([address, score]) => ({ address, score }))
       .sort((a, b) => {
         if (a.score > b.score) return -1;
@@ -142,15 +178,33 @@ export async function getFullLeaderboard(): Promise<
       })
       .slice(0, 10);
 
+    console.log("🎯 Full history leaderboard:", leaderboard.map(entry => ({
+      address: entry.address,
+      score: entry.score.toString()
+    })));
+
+    return leaderboard;
+
   } catch (error) {
     console.error("❌ Failed to fetch full leaderboard:", error);
+    
+    if (error instanceof Error) {
+      console.error("Full history error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack?.substring(0, 500) + "..."
+      });
+    }
+    
     return [];
   }
 }
 
-// ✅ Get leaderboard for a specific player
+// ✅ Enhanced player score function
 export async function getPlayerScore(playerAddress: string): Promise<bigint | null> {
   try {
+    console.log(`🔍 Fetching score for player: ${playerAddress}`);
+    
     const client = createPublicClient({
       chain: base,
       transport: http("https://base-mainnet.g.alchemy.com/v2/yKZCAarfw64JvLWyySYJH"),
@@ -162,11 +216,13 @@ export async function getPlayerScore(playerAddress: string): Promise<bigint | nu
         "event ScoreSubmitted(address indexed player, uint256 score)"
       ),
       args: {
-        player: playerAddress as `0x${string}`,
+        player: playerAddress.toLowerCase() as `0x${string}`,
       },
       fromBlock: BigInt("20000000"),
       toBlock: "latest",
     });
+
+    console.log(`📋 Found ${logs.length} score events for player ${playerAddress}`);
 
     if (logs.length === 0) return null;
 
@@ -178,10 +234,46 @@ export async function getPlayerScore(playerAddress: string): Promise<bigint | nu
       }
     }
 
+    console.log(`🏆 Highest score for ${playerAddress}: ${highestScore.toString()}`);
     return highestScore;
 
   } catch (error) {
     console.error("❌ Failed to fetch player score:", error);
     return null;
+  }
+}
+
+// ✅ Debug function to check recent transactions
+export async function debugRecentTransactions(): Promise<void> {
+  try {
+    const client = createPublicClient({
+      chain: base,
+      transport: http("https://base-mainnet.g.alchemy.com/v2/yKZCAarfw64JvLWyySYJH"),
+    });
+
+    const currentBlock = await client.getBlockNumber();
+    console.log(`🔍 Current block: ${currentBlock}`);
+
+    // Check last 1000 blocks for any activity
+    const logs = await client.getLogs({
+      address: contractAddress,
+      event: parseAbiItem(
+        "event ScoreSubmitted(address indexed player, uint256 score)"
+      ),
+      fromBlock: currentBlock - BigInt(1000),
+      toBlock: "latest",
+    });
+
+    console.log(`🔍 Recent 1000 blocks contain ${logs.length} events`);
+    
+    if (logs.length > 0) {
+      console.log("📋 Most recent events:");
+      logs.slice(-5).forEach((log, i) => {
+        console.log(`  ${i + 1}. Block ${log.blockNumber}: ${log.args?.player} scored ${log.args?.score}`);
+      });
+    }
+
+  } catch (error) {
+    console.error("❌ Debug failed:", error);
   }
 }

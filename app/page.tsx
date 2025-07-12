@@ -39,7 +39,8 @@ export default function Home() {
           method: "eth_accounts",
         });
         if (accounts.length > 0) {
-          setUserAddress(accounts[0]);
+          // Store address in lowercase for consistent comparison
+          setUserAddress(accounts[0].toLowerCase());
           console.log("🔗 Wallet connected:", accounts[0]);
         }
       } catch (err) {
@@ -49,29 +50,45 @@ export default function Home() {
     checkWallet();
   }, []);
 
-  // ✅ Wrapped in useCallback to avoid missing deps in useEffect
-  const loadLeaderboard = useCallback(async (forceFullHistory = false) => {
+  // ✅ Enhanced leaderboard loading with better error handling
+  const loadLeaderboard = useCallback(async (forceFullHistory = false, retryCount = 0) => {
     setIsRefreshingLeaderboard(true);
     try {
-      console.log("🔄 Loading leaderboard...");
+      console.log("🔄 Loading leaderboard... (attempt", retryCount + 1, ")");
 
       let newLeaderboard;
       if (forceFullHistory || useFullHistory) {
         console.log("📚 Using full history mode");
         newLeaderboard = await getFullLeaderboard();
       } else {
-        console.log("⚡ Using recent blocks mode (faster)");
-        newLeaderboard = await getLeaderboard(5000);
+        console.log("⚡ Using recent blocks mode (last 10000 blocks)");
+        // Increased block range for better coverage
+        newLeaderboard = await getLeaderboard(10000);
       }
 
+      console.log("📊 Loaded leaderboard entries:", newLeaderboard.length);
       setLeaderboard(newLeaderboard);
+      
+      // If we just submitted a score and don't see it, try full history once
+      if (scoreSubmitted && newLeaderboard.length === 0 && !forceFullHistory && retryCount === 0) {
+        console.log("🔄 Score submitted but leaderboard empty, trying full history...");
+        setTimeout(() => loadLeaderboard(true, 1), 1000);
+        return;
+      }
+      
       console.log("✅ Leaderboard loaded successfully");
     } catch (error) {
       console.error("❌ Failed to load leaderboard:", error);
+      
+      // Retry once with full history if first attempt fails
+      if (retryCount === 0 && !forceFullHistory) {
+        console.log("🔄 Retrying with full history...");
+        setTimeout(() => loadLeaderboard(true, 1), 2000);
+      }
     } finally {
       setIsRefreshingLeaderboard(false);
     }
-  }, [useFullHistory]);
+  }, [useFullHistory, scoreSubmitted]);
 
   // Load leaderboard on mount
   useEffect(() => {
@@ -104,10 +121,27 @@ export default function Home() {
             });
             setScoreSubmitted(true);
 
-            console.log("🔄 Fetching updated leaderboard...");
+            // ✅ Multiple refresh attempts with increasing delays
+            console.log("🔄 Scheduling leaderboard refreshes...");
+            
+            // First refresh after 3 seconds
             setTimeout(async () => {
+              console.log("🔄 First refresh attempt...");
               await loadLeaderboard();
-            }, 2000);
+            }, 3000);
+            
+            // Second refresh after 8 seconds with full history
+            setTimeout(async () => {
+              console.log("🔄 Second refresh attempt with full history...");
+              await loadLeaderboard(true);
+            }, 8000);
+            
+            // Third refresh after 15 seconds
+            setTimeout(async () => {
+              console.log("🔄 Final refresh attempt...");
+              await loadLeaderboard(true);
+            }, 15000);
+            
           } catch (error) {
             console.error("❌ Failed to submit score:", error);
             setSubmitError("Failed to submit score. Please try again.");
@@ -152,7 +186,7 @@ export default function Home() {
 
   const refreshLeaderboard = async () => {
     console.log("🔄 Manual refresh requested");
-    await loadLeaderboard();
+    await loadLeaderboard(true); // Force full history on manual refresh
   };
 
   const toggleHistoryMode = () => {
@@ -217,6 +251,14 @@ export default function Home() {
         <div className="bg-blue-100 px-4 py-2 rounded-lg text-center text-blue-700">
           <p className="text-sm">🚀 Submitting score to blockchain...</p>
           <p className="text-xs">Please wait for transaction confirmation</p>
+        </div>
+      )}
+
+      {/* SUCCESS MESSAGE */}
+      {scoreSubmitted && !isSubmittingScore && (
+        <div className="bg-green-100 px-4 py-2 rounded-lg text-center text-green-700">
+          <p className="text-sm">✅ Score submitted successfully!</p>
+          <p className="text-xs">Leaderboard will update shortly</p>
         </div>
       )}
 
@@ -343,12 +385,17 @@ export default function Home() {
             </ol>
           ) : (
             <div className="text-center py-4">
-              <p className="text-gray-600">No scores yet. Be the first to play!</p>
+              <p className="text-gray-600">
+                {scoreSubmitted 
+                  ? "Your score is being processed..." 
+                  : "No scores yet. Be the first to play!"
+                }
+              </p>
               <button
                 onClick={() => loadLeaderboard(true)}
                 className="text-xs text-blue-600 underline mt-2"
               >
-                Try loading full history
+                Force refresh with full history
               </button>
             </div>
           )}
