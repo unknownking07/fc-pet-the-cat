@@ -29,4 +29,23 @@ export async function submitScoreToChain(score: number) {
     const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
 
     if (typeof contract.submitScore !== "function") {
-      console.error("🚫 submitScore() func
+      console.error("🚫 submitScore() function missing in ABI");
+      throw new Error("submitScore() not found in contract.");
+    }
+
+    console.log("📡 Sending score:", score);
+    const tx = await contract.submitScore(score);
+    console.log("⛓️ Tx submitted:", tx.hash);
+
+    await tx.wait();
+    console.log("✅ Tx confirmed:", tx.hash);
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error("❌ Score submission failed:", err.message);
+      throw new Error("Failed to submit score. Make sure you're in Warpcast.");
+    } else {
+      console.error("❌ Unknown error during score submission:", err);
+      throw new Error("Something went wrong submitting score.");
+    }
+  }
+}
