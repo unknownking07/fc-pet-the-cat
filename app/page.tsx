@@ -23,9 +23,9 @@ export default function Home() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isRefreshingLeaderboard, setIsRefreshingLeaderboard] = useState(false);
   const [useFullHistory, setUseFullHistory] = useState(false);
-  const [walletMissing, setWalletMissing] = useState(false);
-  const [manualSubmit, setManualSubmit] = useState(false);
   const [catBop, setCatBop] = useState(false);
+  const [readyToSubmit, setReadyToSubmit] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
 
   const catSpring = useSpring({
     transform: catBop ? "scale(1.15) rotate(-7deg)" : "scale(1) rotate(0deg)",
@@ -40,81 +40,56 @@ export default function Home() {
     sdk.actions.ready().catch(console.error);
   }, []);
 
-  // Detect wallet
+  // Detect wallet and auto-connect if possible
   useEffect(() => {
     async function checkWallet() {
       try {
+        // Try to get accounts
         const accounts = await sdk.wallet.ethProvider.request({
           method: "eth_accounts",
         });
         if (accounts.length > 0) {
           setUserAddress(accounts[0].toLowerCase());
-          setWalletMissing(false);
-          console.log("🔗 Wallet connected:", accounts[0]);
+          setSignedIn(true);
         } else {
-          setWalletMissing(true);
+          setSignedIn(false);
         }
-      } catch (err) {
-        setWalletMissing(true);
-        console.error("❌ Wallet not connected", err);
+      } catch {
+        setSignedIn(false);
       }
     }
     checkWallet();
   }, []);
 
-  // Enhanced leaderboard loading with better error handling
+  // Leaderboard loading
   const loadLeaderboard = useCallback(
     async (forceFullHistory = false, retryCount = 0) => {
       setIsRefreshingLeaderboard(true);
       try {
-        console.log("🔄 Loading leaderboard... (attempt", retryCount + 1, ")");
-
         let newLeaderboard;
         if (forceFullHistory || useFullHistory) {
-          console.log("📚 Using full history mode");
           newLeaderboard = await getFullLeaderboard();
         } else {
-          console.log("⚡ Using recent blocks mode (last 10000 blocks)");
           newLeaderboard = await getLeaderboard(10000);
         }
-
-        console.log("📊 Loaded leaderboard entries:", newLeaderboard.length);
         setLeaderboard(newLeaderboard);
-
-        if (
-          scoreSubmitted &&
-          newLeaderboard.length === 0 &&
-          !forceFullHistory &&
-          retryCount === 0
-        ) {
-          console.log(
-            "🔄 Score submitted but leaderboard empty, trying full history..."
-          );
-          setTimeout(() => loadLeaderboard(true, 1), 1000);
-          return;
-        }
-
-        console.log("✅ Leaderboard loaded successfully");
-      } catch (error) {
-        console.error("❌ Failed to load leaderboard:", error);
-
+      } catch {
         if (retryCount === 0 && !forceFullHistory) {
-          console.log("🔄 Retrying with full history...");
           setTimeout(() => loadLeaderboard(true, 1), 2000);
         }
       } finally {
         setIsRefreshingLeaderboard(false);
       }
     },
-    [useFullHistory, scoreSubmitted]
+    [useFullHistory]
   );
 
-  // Load leaderboard on mount
+  // Load leaderboard only when needed
   useEffect(() => {
-    loadLeaderboard();
-  }, [loadLeaderboard]);
+    if (showLeaderboard) loadLeaderboard();
+  }, [showLeaderboard, loadLeaderboard]);
 
-  // Countdown logic (add manual submit fallback)
+  // Countdown logic
   useEffect(() => {
     if (!isRunning) return;
 
@@ -125,64 +100,21 @@ export default function Home() {
       } else {
         clearInterval(intervalId);
         setRun(false);
-
-        if (!scoreSubmitted && tapsRef.current > 0) {
-          setIsSubmittingScore(true);
-          setSubmitError(null);
-          setManualSubmit(false);
-
-          try {
-            console.log("🚀 Submitting score to chain...");
-            await submitScoreToChain(tapsRef.current);
-            confetti({
-              particleCount: 100,
-              spread: 70,
-              origin: { y: 0.6 },
-            });
-            setScoreSubmitted(true);
-
-            // Multiple refresh attempts with increasing delays
-            console.log("🔄 Scheduling leaderboard refreshes...");
-
-            setTimeout(async () => {
-              console.log("🔄 First refresh attempt...");
-              await loadLeaderboard();
-            }, 3000);
-
-            setTimeout(async () => {
-              console.log("🔄 Second refresh attempt with full history...");
-              await loadLeaderboard(true);
-            }, 8000);
-
-            setTimeout(async () => {
-              console.log("🔄 Final refresh attempt...");
-              await loadLeaderboard(true);
-            }, 15000);
-          } catch (error) {
-            console.error("❌ Failed to submit score:", error);
-            setSubmitError("Failed to submit score. Please try again.");
-            setManualSubmit(true);
-          } finally {
-            setIsSubmittingScore(false);
-          }
-        }
+        setReadyToSubmit(true);
       }
     };
 
     const intervalId = setInterval(tick, 1000);
     return () => clearInterval(intervalId);
-  }, [isRunning, scoreSubmitted, loadLeaderboard]);
+  }, [isRunning]);
 
-  // Enhanced handleTap with animation
+  // Cat tap animation
   const handleTap = () => {
     if (visibleTime === 0 || scoreSubmitted || isSubmittingScore) return;
-
     if (!isRunning) {
       timeRef.current = GAME_LENGTH;
       setRun(true);
-      console.log("🎮 Game started!");
     }
-
     if (timeRef.current > 0) {
       tapsRef.current += 1;
       setVisibleTaps(tapsRef.current);
@@ -191,8 +123,45 @@ export default function Home() {
     }
   };
 
+  // Sign in and submit score
+  const handleSignInAndSubmit = async () => {
+    setIsSubmittingScore(true);
+    setSubmitError(null);
+    try {
+      // Request wallet connection if not signed in
+      if (!signedIn) {
+        await sdk.wallet.connect();
+        // Re-check address
+        const accounts = await sdk.wallet.ethProvider.request({
+          method: "eth_accounts",
+        });
+        if (accounts.length > 0) {
+          setUserAddress(accounts[0].toLowerCase());
+          setSignedIn(true);
+        } else {
+          setSubmitError("Wallet connection failed.");
+          setIsSubmittingScore(false);
+          return;
+        }
+      }
+      // Submit score
+      await submitScoreToChain(tapsRef.current);
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+      setScoreSubmitted(true);
+      setShowLeaderboard(true);
+      setTimeout(() => loadLeaderboard(), 3000);
+    } catch {
+      setSubmitError("Failed to submit score. Please try again.");
+    } finally {
+      setIsSubmittingScore(false);
+    }
+  };
+
   const resetGame = () => {
-    console.log("🔄 Resetting game...");
     timeRef.current = GAME_LENGTH;
     tapsRef.current = 0;
     setVisibleTime(GAME_LENGTH);
@@ -202,49 +171,26 @@ export default function Home() {
     setShowLeaderboard(false);
     setSubmitError(null);
     setIsSubmittingScore(false);
-    setManualSubmit(false);
+    setReadyToSubmit(false);
   };
 
   const refreshLeaderboard = async () => {
-    console.log("🔄 Manual refresh requested");
     await loadLeaderboard(true);
   };
 
   const toggleHistoryMode = () => {
     setUseFullHistory(!useFullHistory);
-    console.log(
-      `🔄 Switched to ${!useFullHistory ? "full history" : "recent blocks"} mode`
-    );
   };
 
   return (
     <main
-      className="flex flex-col items-center justify-center h-full min-h-screen gap-6 px-4 py-8"
+      className="flex flex-col items-center justify-center h-full min-h-screen gap-6 px-4 py-8 bg-gradient-to-br from-yellow-50 to-violet-100"
       style={{
         backgroundImage: "url('/cat-bg.png')",
         backgroundSize: "cover",
         backgroundRepeat: "repeat",
       }}
     >
-      {/* WALLET PROMPT */}
-      {walletMissing && (
-        <div className="bg-red-100 px-4 py-2 rounded-lg text-center text-red-700 mb-4">
-          <p className="text-sm font-bold">Wallet not detected!</p>
-          <p className="text-xs">
-            Please open this mini app inside Warpcast to play and submit your
-            score onchain.
-          </p>
-          <a
-            href="https://warpcast.com/miniapps/1s5lW72LNk14/tap-the-cat"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block mt-2 px-4 py-2 bg-violet-700 text-white rounded-full shadow hover:bg-violet-600 transition"
-          >
-            Open in Warpcast
-          </a>
-        </div>
-      )}
-
       {/* CAT IMAGE with animation */}
       <div className="bg-white/90 p-4 rounded-xl shadow">
         <animated.div style={catSpring}>
@@ -299,15 +245,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* SUCCESS MESSAGE */}
-      {scoreSubmitted && !isSubmittingScore && (
-        <div className="bg-green-100 px-4 py-2 rounded-lg text-center text-green-700">
-          <p className="text-sm">✅ Score submitted successfully!</p>
-          <p className="text-xs">Leaderboard will update shortly</p>
-        </div>
-      )}
-
-      {/* ERROR + MANUAL SUBMIT */}
+      {/* ERROR */}
       {submitError && (
         <div className="bg-red-100 px-4 py-2 rounded-lg text-center text-red-700">
           <p className="text-sm">{submitError}</p>
@@ -317,84 +255,40 @@ export default function Home() {
           >
             Dismiss
           </button>
-          {manualSubmit && (
-            <button
-              onClick={async () => {
-                setIsSubmittingScore(true);
-                setSubmitError(null);
-                try {
-                  await submitScoreToChain(tapsRef.current);
-                  confetti({
-                    particleCount: 100,
-                    spread: 70,
-                    origin: { y: 0.6 },
-                  });
-                  setScoreSubmitted(true);
-                  setManualSubmit(false);
-                  setTimeout(async () => {
-                    await loadLeaderboard();
-                  }, 3000);
-                 } catch {
-                  setSubmitError("Manual submission failed. Try again.");
-                 } finally {
-                  setIsSubmittingScore(false);
-                }
-              }}
-              className="mt-2 px-4 py-2 bg-violet-700 text-white rounded-full shadow hover:bg-violet-600 transition"
-            >
-              Submit Score
-            </button>
-          )}
         </div>
       )}
 
       {/* GAME OVER ACTIONS */}
-      {visibleTime === 0 && !isSubmittingScore && (
+      {visibleTime === 0 && !isSubmittingScore && !scoreSubmitted && (
         <div className="flex flex-col items-center gap-3">
-          <button
-            onClick={async () => {
-              const message = `😸 I petted the cat ${visibleTaps} times in ${GAME_LENGTH} seconds! Try it yourself: https://farcaster.xyz/miniapps/1s5lW72LNk14/tap-the-cat`;
-              try {
-                await sdk.actions.composeCast({ text: message });
-              } catch (err) {
-                console.error("❌ Failed to share score", err);
-              }
-            }}
-            className="px-4 py-2 bg-white text-black font-semibold rounded-full shadow hover:bg-gray-100 transition"
-          >
-            Share Score
-          </button>
-
+          {readyToSubmit && (
+            <button
+              onClick={handleSignInAndSubmit}
+              className="px-6 py-3 text-lg font-bold rounded-full shadow-lg bg-violet-700 text-white hover:bg-violet-600 transition"
+              disabled={isSubmittingScore}
+            >
+              {signedIn ? "Submit Score" : "Sign In & Submit Score"}
+            </button>
+          )}
           <button
             onClick={resetGame}
             className="px-4 py-2 bg-white text-black font-semibold rounded-full shadow hover:bg-gray-100 transition"
           >
             Play again
           </button>
+        </div>
+      )}
 
-          <div className="flex flex-wrap gap-2 justify-center">
-            <button
-              onClick={() => setShowLeaderboard((prev) => !prev)}
-              className="px-4 py-2 bg-violet-700 text-white font-semibold rounded-full shadow hover:bg-violet-600 transition"
-            >
-              {showLeaderboard ? "Hide Leaderboard" : "Show Leaderboard"}
-            </button>
-
-            <button
-              onClick={refreshLeaderboard}
-              disabled={isRefreshingLeaderboard}
-              className="px-4 py-2 bg-green-600 text-white font-semibold rounded-full shadow hover:bg-green-500 transition disabled:opacity-50"
-            >
-              {isRefreshingLeaderboard ? "Refreshing..." : "Refresh"}
-            </button>
-
-            <button
-              onClick={toggleHistoryMode}
-              className="px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-full shadow hover:bg-blue-500 transition"
-            >
-              {useFullHistory ? "⚡ Fast Mode" : "📚 Full History"}
-            </button>
-          </div>
+      {/* SUCCESS MESSAGE */}
+      {scoreSubmitted && !isSubmittingScore && (
+        <div className="bg-green-100 px-4 py-2 rounded-lg text-center text-green-700">
+          <p className="text-sm">✅ Score submitted successfully!</p>
+          <button
+            onClick={() => setShowLeaderboard(true)}
+            className="mt-2 px-4 py-2 bg-violet-700 text-white rounded-full shadow hover:bg-violet-600 transition"
+          >
+            Show Leaderboard
+          </button>
         </div>
       )}
 
@@ -470,7 +364,7 @@ export default function Home() {
                   : "No scores yet. Be the first to play!"}
               </p>
               <button
-                onClick={() => loadLeaderboard(true)}
+                onClick={refreshLeaderboard}
                 className="text-xs text-blue-600 underline mt-2"
               >
                 Force refresh with full history
