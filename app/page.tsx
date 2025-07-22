@@ -6,6 +6,7 @@ import { getLeaderboard, getFullLeaderboard } from "@/lib/getLeaderboard";
 import { submitScoreToChain } from "@/lib/submitScore";
 import confetti from "canvas-confetti";
 import Image from "next/image";
+import { useSpring, animated } from "@react-spring/web";
 
 export default function Home() {
   const GAME_LENGTH = 10;
@@ -22,6 +23,14 @@ export default function Home() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isRefreshingLeaderboard, setIsRefreshingLeaderboard] = useState(false);
   const [useFullHistory, setUseFullHistory] = useState(false);
+  const [walletMissing, setWalletMissing] = useState(false);
+  const [manualSubmit, setManualSubmit] = useState(false);
+  const [catBop, setCatBop] = useState(false);
+
+  const catSpring = useSpring({
+    transform: catBop ? "scale(1.15) rotate(-7deg)" : "scale(1) rotate(0deg)",
+    config: { tension: 300, friction: 10 },
+  });
 
   const timeRef = useRef(GAME_LENGTH);
   const tapsRef = useRef(0);
@@ -39,63 +48,73 @@ export default function Home() {
           method: "eth_accounts",
         });
         if (accounts.length > 0) {
-          // Store address in lowercase for consistent comparison
           setUserAddress(accounts[0].toLowerCase());
+          setWalletMissing(false);
           console.log("🔗 Wallet connected:", accounts[0]);
+        } else {
+          setWalletMissing(true);
         }
       } catch (err) {
+        setWalletMissing(true);
         console.error("❌ Wallet not connected", err);
       }
     }
     checkWallet();
   }, []);
 
-  // ✅ Enhanced leaderboard loading with better error handling
-  const loadLeaderboard = useCallback(async (forceFullHistory = false, retryCount = 0) => {
-    setIsRefreshingLeaderboard(true);
-    try {
-      console.log("🔄 Loading leaderboard... (attempt", retryCount + 1, ")");
+  // Enhanced leaderboard loading with better error handling
+  const loadLeaderboard = useCallback(
+    async (forceFullHistory = false, retryCount = 0) => {
+      setIsRefreshingLeaderboard(true);
+      try {
+        console.log("🔄 Loading leaderboard... (attempt", retryCount + 1, ")");
 
-      let newLeaderboard;
-      if (forceFullHistory || useFullHistory) {
-        console.log("📚 Using full history mode");
-        newLeaderboard = await getFullLeaderboard();
-      } else {
-        console.log("⚡ Using recent blocks mode (last 10000 blocks)");
-        // Increased block range for better coverage
-        newLeaderboard = await getLeaderboard(10000);
-      }
+        let newLeaderboard;
+        if (forceFullHistory || useFullHistory) {
+          console.log("📚 Using full history mode");
+          newLeaderboard = await getFullLeaderboard();
+        } else {
+          console.log("⚡ Using recent blocks mode (last 10000 blocks)");
+          newLeaderboard = await getLeaderboard(10000);
+        }
 
-      console.log("📊 Loaded leaderboard entries:", newLeaderboard.length);
-      setLeaderboard(newLeaderboard);
-      
-      // If we just submitted a score and don't see it, try full history once
-      if (scoreSubmitted && newLeaderboard.length === 0 && !forceFullHistory && retryCount === 0) {
-        console.log("🔄 Score submitted but leaderboard empty, trying full history...");
-        setTimeout(() => loadLeaderboard(true, 1), 1000);
-        return;
+        console.log("📊 Loaded leaderboard entries:", newLeaderboard.length);
+        setLeaderboard(newLeaderboard);
+
+        if (
+          scoreSubmitted &&
+          newLeaderboard.length === 0 &&
+          !forceFullHistory &&
+          retryCount === 0
+        ) {
+          console.log(
+            "🔄 Score submitted but leaderboard empty, trying full history..."
+          );
+          setTimeout(() => loadLeaderboard(true, 1), 1000);
+          return;
+        }
+
+        console.log("✅ Leaderboard loaded successfully");
+      } catch (error) {
+        console.error("❌ Failed to load leaderboard:", error);
+
+        if (retryCount === 0 && !forceFullHistory) {
+          console.log("🔄 Retrying with full history...");
+          setTimeout(() => loadLeaderboard(true, 1), 2000);
+        }
+      } finally {
+        setIsRefreshingLeaderboard(false);
       }
-      
-      console.log("✅ Leaderboard loaded successfully");
-    } catch (error) {
-      console.error("❌ Failed to load leaderboard:", error);
-      
-      // Retry once with full history if first attempt fails
-      if (retryCount === 0 && !forceFullHistory) {
-        console.log("🔄 Retrying with full history...");
-        setTimeout(() => loadLeaderboard(true, 1), 2000);
-      }
-    } finally {
-      setIsRefreshingLeaderboard(false);
-    }
-  }, [useFullHistory, scoreSubmitted]);
+    },
+    [useFullHistory, scoreSubmitted]
+  );
 
   // Load leaderboard on mount
   useEffect(() => {
     loadLeaderboard();
   }, [loadLeaderboard]);
 
-  // Countdown logic
+  // Countdown logic (add manual submit fallback)
   useEffect(() => {
     if (!isRunning) return;
 
@@ -110,6 +129,7 @@ export default function Home() {
         if (!scoreSubmitted && tapsRef.current > 0) {
           setIsSubmittingScore(true);
           setSubmitError(null);
+          setManualSubmit(false);
 
           try {
             console.log("🚀 Submitting score to chain...");
@@ -117,34 +137,31 @@ export default function Home() {
             confetti({
               particleCount: 100,
               spread: 70,
-              origin: { y: 0.6 }
+              origin: { y: 0.6 },
             });
             setScoreSubmitted(true);
 
-            // ✅ Multiple refresh attempts with increasing delays
+            // Multiple refresh attempts with increasing delays
             console.log("🔄 Scheduling leaderboard refreshes...");
-            
-            // First refresh after 3 seconds
+
             setTimeout(async () => {
               console.log("🔄 First refresh attempt...");
               await loadLeaderboard();
             }, 3000);
-            
-            // Second refresh after 8 seconds with full history
+
             setTimeout(async () => {
               console.log("🔄 Second refresh attempt with full history...");
               await loadLeaderboard(true);
             }, 8000);
-            
-            // Third refresh after 15 seconds
+
             setTimeout(async () => {
               console.log("🔄 Final refresh attempt...");
               await loadLeaderboard(true);
             }, 15000);
-            
           } catch (error) {
             console.error("❌ Failed to submit score:", error);
             setSubmitError("Failed to submit score. Please try again.");
+            setManualSubmit(true);
           } finally {
             setIsSubmittingScore(false);
           }
@@ -156,6 +173,7 @@ export default function Home() {
     return () => clearInterval(intervalId);
   }, [isRunning, scoreSubmitted, loadLeaderboard]);
 
+  // Enhanced handleTap with animation
   const handleTap = () => {
     if (visibleTime === 0 || scoreSubmitted || isSubmittingScore) return;
 
@@ -168,6 +186,8 @@ export default function Home() {
     if (timeRef.current > 0) {
       tapsRef.current += 1;
       setVisibleTaps(tapsRef.current);
+      setCatBop(true);
+      setTimeout(() => setCatBop(false), 150);
     }
   };
 
@@ -182,11 +202,12 @@ export default function Home() {
     setShowLeaderboard(false);
     setSubmitError(null);
     setIsSubmittingScore(false);
+    setManualSubmit(false);
   };
 
   const refreshLeaderboard = async () => {
     console.log("🔄 Manual refresh requested");
-    await loadLeaderboard(true); // Force full history on manual refresh
+    await loadLeaderboard(true);
   };
 
   const toggleHistoryMode = () => {
@@ -205,21 +226,45 @@ export default function Home() {
         backgroundRepeat: "repeat",
       }}
     >
-      {/* CAT IMAGE */}
+      {/* WALLET PROMPT */}
+      {walletMissing && (
+        <div className="bg-red-100 px-4 py-2 rounded-lg text-center text-red-700 mb-4">
+          <p className="text-sm font-bold">Wallet not detected!</p>
+          <p className="text-xs">
+            Please open this mini app inside Warpcast to play and submit your
+            score onchain.
+          </p>
+          <a
+            href="https://warpcast.com/miniapps/1s5lW72LNk14/tap-the-cat"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block mt-2 px-4 py-2 bg-violet-700 text-white rounded-full shadow hover:bg-violet-600 transition"
+          >
+            Open in Warpcast
+          </a>
+        </div>
+      )}
+
+      {/* CAT IMAGE with animation */}
       <div className="bg-white/90 p-4 rounded-xl shadow">
-        <Image
-          src="/cat.png"
-          alt="Brown cat"
-          width={160}
-          height={160}
-          className="rounded-2xl shadow-lg select-none"
-          onClick={handleTap}
-          style={{
-            cursor:
-              visibleTime === 0 || isSubmittingScore ? "not-allowed" : "pointer",
-            opacity: isSubmittingScore ? 0.7 : 1,
-          }}
-        />
+        <animated.div style={catSpring}>
+          <Image
+            src="/cat.png"
+            alt="Brown cat"
+            width={160}
+            height={160}
+            className="rounded-2xl shadow-lg select-none"
+            onClick={handleTap}
+            style={{
+              cursor:
+                visibleTime === 0 || isSubmittingScore
+                  ? "not-allowed"
+                  : "pointer",
+              opacity: isSubmittingScore ? 0.7 : 1,
+              userSelect: "none",
+            }}
+          />
+        </animated.div>
       </div>
 
       {/* PET BUTTON */}
@@ -262,7 +307,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* ERROR */}
+      {/* ERROR + MANUAL SUBMIT */}
       {submitError && (
         <div className="bg-red-100 px-4 py-2 rounded-lg text-center text-red-700">
           <p className="text-sm">{submitError}</p>
@@ -272,6 +317,34 @@ export default function Home() {
           >
             Dismiss
           </button>
+          {manualSubmit && (
+            <button
+              onClick={async () => {
+                setIsSubmittingScore(true);
+                setSubmitError(null);
+                try {
+                  await submitScoreToChain(tapsRef.current);
+                  confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                  });
+                  setScoreSubmitted(true);
+                  setManualSubmit(false);
+                  setTimeout(async () => {
+                    await loadLeaderboard();
+                  }, 3000);
+                } catch (err) {
+                  setSubmitError("Manual submission failed. Try again.");
+                } finally {
+                  setIsSubmittingScore(false);
+                }
+              }}
+              className="mt-2 px-4 py-2 bg-violet-700 text-white rounded-full shadow hover:bg-violet-600 transition"
+            >
+              Submit Score
+            </button>
+          )}
         </div>
       )}
 
@@ -359,7 +432,13 @@ export default function Home() {
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-lg">
-                        {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`}
+                        {i === 0
+                          ? "🥇"
+                          : i === 1
+                          ? "🥈"
+                          : i === 2
+                          ? "🥉"
+                          : `${i + 1}.`}
                       </span>
                       <Image
                         src={avatarUrl}
@@ -386,10 +465,9 @@ export default function Home() {
           ) : (
             <div className="text-center py-4">
               <p className="text-gray-600">
-                {scoreSubmitted 
-                  ? "Your score is being processed..." 
-                  : "No scores yet. Be the first to play!"
-                }
+                {scoreSubmitted
+                  ? "Your score is being processed..."
+                  : "No scores yet. Be the first to play!"}
               </p>
               <button
                 onClick={() => loadLeaderboard(true)}
