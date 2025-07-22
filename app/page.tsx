@@ -178,10 +178,6 @@ export default function Home() {
     await loadLeaderboard(true);
   };
 
-  const toggleHistoryMode = () => {
-    setUseFullHistory(!useFullHistory);
-  };
-
   return (
     <main
       className="flex flex-col items-center justify-center h-full min-h-screen gap-6 px-4 py-8 bg-gradient-to-br from-yellow-50 to-violet-100"
