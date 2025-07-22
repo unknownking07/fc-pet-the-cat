@@ -334,9 +334,9 @@ export default function Home() {
                   setTimeout(async () => {
                     await loadLeaderboard();
                   }, 3000);
-                } catch (err) {
+                 } catch {
                   setSubmitError("Manual submission failed. Try again.");
-                } finally {
+                 } finally {
                   setIsSubmittingScore(false);
                 }
               }}
